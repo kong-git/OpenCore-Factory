@@ -181,7 +181,7 @@ steps:
         local Count="$(git rev-list --count $(eval echo \$"${1}"cmt)..HEAD)"
 
         if [[ "$Count" != 0 ]]; then
-          local Note="$(git log -"$Count" --format=" - %s %n")"
+          local Note="$(git log -"$Count" --format="- %s %n")"
           echo "Got $Count Notes from ${2}Pkg"
           echo "### ${2}Pkg" >> $ToMD || exit 1
           echo "$Note" >> $ToMD || exit 1
@@ -198,6 +198,7 @@ steps:
       ## Exclude unnecessary links
       sed -i -e $'s/http.*//g' $ToMD
       sed -i -e '/^$/d' $ToMD
+      sed -i -e 's/###/\'$'\n''###/g' $ToMD
       cat $ToMD
 
 - task: CmdLine@2
@@ -213,6 +214,27 @@ steps:
       git add .
       git commit -m "Refresh Commits to $(BuildDate)"
       git push origin master
+
+- task: CmdLine@2
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'), eq(variables['BuildCheck'], 'True'))
+  displayName: Publish Gogs Mirror
+  inputs:
+    script: |
+      rm -rf ~/.gitconfig
+      rm -rf ~/.git-credentials
+      git config --global user.email $(GogsEmail)
+      git config --global user.name $(GogsUser)
+      git config --global user.password $(GogsPwd)
+      cd ../b
+      git clone http://git.xu.mk/$(Build.Repository.Name).git # May change later
+      cd $(REPO)
+      git reset --hard HEAD~1
+      cp -R $(Build.ArtifactStagingDirectory)/Artifacts/*.zip .
+      cp $(Build.ArtifactStagingDirectory)/ReleaseNotes.md .
+      mv ReleaseNotes.md README.md
+      git add .
+      git commit -m "OpenCore-Build-$(BuildDate)"
+      git push --force origin master
 
 # Gitee Sucks!
 #- task: CmdLine@2
