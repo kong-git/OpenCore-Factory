@@ -145,18 +145,24 @@ steps:
       ./macbuild.tool
 
 - task: CmdLine@2
-  condition: and(succeeded(), eq(variables['BuildCheck'], 'True'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  condition: and(succeeded(), or(eq(variables['BuildCheck'], 'True'), ne(variables['Build.SourceBranch'], 'refs/heads/master')))
   displayName: Move Binaries
   inputs:
     script: |
       cd ../b/OpenCorePkg
       mkdir ../../a/Artifacts
 
-      for Artifact in OpenCore AppleSupport; do
-          for Tgt in DEBUG RELEASE; do
-              cp UDK/Build/${Artifact}Pkg/${Tgt}*/X64/${Artifact}*.zip ../../a/Artifacts
+      if [ ! -f UDK/Build/${Artifact}Pkg/${Tgt}*/X64/${Artifact}*.zip ]; then
+          echo "##vso[task.setvariable variable=ExArtifact]False"
+      else
+          for Artifact in OpenCore AppleSupport; do
+              for Tgt in DEBUG RELEASE; do
+                  cp UDK/Build/${Artifact}Pkg/${Tgt}*/X64/${Artifact}*.zip ../../a/Artifacts
+              done
           done
-      done
+          echo "##vso[task.setvariable variable=ExArtifact]True"
+      fi
+
       ls $(Build.ArtifactStagingDirectory)/Artifacts
 
 - task: Bash@3
@@ -195,14 +201,13 @@ steps:
       GNotes ASP AppleSupport
 
       # Reformat Release Notes
-      ## Exclude unnecessary links
-      sed -i -e $'s/http.*//g' $ToMD
+      sed -i -e $'s/http.*//g' $ToMD # Exclude unnecessary links
       sed -i -e '/^$/d' $ToMD
       sed -i -e 's/###/\'$'\n''###/g' $ToMD
       cat $ToMD
 
 - task: CmdLine@2
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'), eq(variables['BuildCheck'], 'True'))
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'), eq(variables['BuildCheck'], 'True'), eq(variables['ExArtifact'], 'True'))
   displayName: Refresh Commits
   inputs:
     script: |
@@ -259,7 +264,7 @@ steps:
 #      git push origin master
 
 - task: GitHubRelease@0
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'), eq(variables['BuildCheck'], 'True'))
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'), eq(variables['BuildCheck'], 'True'), eq(variables['ExArtifact'], 'True'))
   displayName: 'Publish GitHub Release'
   inputs:
     gitHubConnection: release
